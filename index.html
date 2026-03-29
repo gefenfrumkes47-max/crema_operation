@@ -288,6 +288,38 @@
     </div>
 
     <script>
+        const BLYNK_TOKEN = "Nr4eSKmu9qbe2CRT2EVkTExZfXxVBuer";
+        const WRITE_URL = "https://blynk.cloud/external/api/update?token=" + BLYNK_TOKEN;
+        const READ_URL = "https://blynk.cloud/external/api/get?token=" + BLYNK_TOKEN;
+
+        window.onload = async function() {
+            try {
+                // Add a small timeout so it doesn't hang forever if the network drops
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+                const response = await fetch(`${READ_URL}&v0&v1&v2&v3`, { signal: controller.signal });
+                const data = await response.json();
+                clearTimeout(timeoutId);
+
+            } catch (error) {
+                console.error("Failed to sync initial state:", error);
+                // If it fails, we still want to show the UI (it will just use defaults)
+            } finally {
+                // Hide loading screen and show the app
+                document.getElementById("loading-screen").style.opacity = "0";
+                setTimeout(() => {
+                    document.getElementById("loading-screen").style.display = "none";
+                    document.getElementById("main-ui").style.opacity = "1";
+                }, 500); // wait for fade out to finish
+            }
+        };
+
+        function blynkWrite(pin, value) {
+            fetch(`${WRITE_URL}&${pin}=${value}`)
+                .catch(error => console.error("Error sending command:", error));
+        }
+
         window.addEventListener('load', function () {
             setTimeout(function () {
                 var ls = document.getElementById('loading-screen');
@@ -301,6 +333,8 @@
         var selected = null;
         var brewing = false;
         var countdownInterval = null;
+        var types = { ristretto: 0, espresso: 1, lungo: 2};
+
 
         function selectCoffee(btn) {
             if (brewing) return;
@@ -312,6 +346,7 @@
             }
             btn.classList.add('selected');
             selected = btn.dataset.type;
+            blynkWrite("v1", types[selected]);
             updateBrewBtn();
         }
 
@@ -348,32 +383,14 @@
                 ripple.style.top = (e.clientY - btn.getBoundingClientRect().top) + 'px';
                 btn.appendChild(ripple);
                 setTimeout(function() { ripple.remove(); }, 600);
-            
+
+                blynkWrite("v1", 3);
+
                 brewing = true;
                 btn.disabled = true;
                 document.querySelectorAll('.coffee-btn').forEach(function(b) { b.style.pointerEvents = 'none'; });
-            
-                // --- BLYNK CONFIGURATION ---
-                const BLYNK_TOKEN = "Te62lesdsyaEPWzDi3gw57g0Lvwwucra"
-                const cmdMap = { ristretto: 1, espresso: 2, lungo: 3 };
-                const cmdValue = cmdMap[selected];
-            
-                label.textContent = 'Sending to Cloud…';
-            
-                // ── Send command to Blynk Cloud API ──────────────────────────
-                fetch(`https://blynk.cloud/external/api/update?token=${BLYNK_TOKEN}&V0=${cmdValue}`)
-                .then(function (res) {
-                    if (!res.ok) throw new Error('Cloud error ' + res.status);
-                    // Start the visual countdown on the phone
-                    startCountdown(selected, btn, label, hint, progressWrap, progressFill);
-                })
-                .catch(function (err) {
-                    brewing = false;
-                    btn.disabled = false;
-                    document.querySelectorAll('.coffee-btn').forEach(function(b) { b.style.pointerEvents = ''; });
-                    label.textContent = 'Cloud Failed';
-                    hint.textContent = err.message;
-                });
+                startCountdown(selected, btn, label, hint, progressWrap, progressFill);
+
         }
 
         function startCountdown(coffeeType, btn, label, hint, progressWrap, progressFill) {
@@ -396,6 +413,9 @@
                     label.textContent = 'Brewing… ' + remaining + 's';
                 } else {
                     clearInterval(countdownInterval);
+
+                    blynkWrite("v1", 4);
+
                     brewing = false;
                     btn.disabled = false;
                     document.querySelectorAll('.coffee-btn').forEach(function (b) { b.style.pointerEvents = ''; });
